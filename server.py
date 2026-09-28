@@ -25,6 +25,7 @@ import random
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -452,6 +453,8 @@ def main():
     print(flush=True)
 
     tunnel = start_tunnel(args.port, game, args.cloudflared) if args.tunnel else None
+    # Treat `kill` like Ctrl+C so the tunnel process is always stopped too
+    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt))
     try:
         server.serve_forever()
     except KeyboardInterrupt:
