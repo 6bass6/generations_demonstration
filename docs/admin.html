@@ -106,6 +106,36 @@
         <div id="bday-list"></div>
       </div>
     </section>
+
+    <!-- betting -->
+    <section id="admin-betting" hidden>
+      <div class="top">
+        <div><h1 id="bet-round">Betting</h1><div class="muted" id="bet-state"></div></div>
+        <div class="row">
+          <button id="bet-toggle">Close betting</button>
+          <button id="bet-new" class="danger">New round</button>
+        </div>
+      </div>
+      <div class="admin-grid">
+        <div class="card">
+          <div class="muted" style="margin-bottom:10px">Bets per number (only you see this)</div>
+          <div class="bet-counts" id="bet-counts"></div>
+          <div class="muted" style="margin-top:12px;font-size:14px" id="bet-nopick"></div>
+        </div>
+        <div class="card">
+          <div class="muted">Correct number</div>
+          <div class="row" style="margin-top:8px">
+            <input id="bet-answer" type="number" min="0" max="3" inputmode="numeric" placeholder="0–3" class="answer">
+            <button id="bet-reveal" class="primary">Reveal</button>
+          </div>
+          <div class="muted" id="bet-answer-msg" style="margin-top:8px;font-size:14px"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 id="bet-winners-title" style="margin-bottom:10px">Winners</h3>
+        <div class="chips" id="bet-winners"><span class="muted">Reveal the correct number to see the winners.</span></div>
+      </div>
+    </section>
   </div>
 </main>
 <div class="status" id="status"></div>
@@ -115,6 +145,7 @@
 <script src="js/admin/welcome.js"></script>
 <script src="js/admin/generations.js"></script>
 <script src="js/admin/birthday.js"></script>
+<script src="js/admin/betting.js"></script>
 <script src="js/admin.js"></script>
 </body>
 </html>

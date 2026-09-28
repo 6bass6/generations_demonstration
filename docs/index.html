@@ -59,6 +59,19 @@
     </div>
     <div class="card message" id="bday-result"></div>
   </section>
+
+  <!-- betting -->
+  <section id="view-betting" hidden>
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="margin-bottom:12px" id="bet-title">Place your bet</h2>
+      <div class="bets" id="bet-buttons">
+        <button data-pick="0">0</button><button data-pick="1">1</button>
+        <button data-pick="2">2</button><button data-pick="3">3</button>
+      </div>
+      <p class="muted" id="bet-note" style="margin:12px 0 0"></p>
+    </div>
+    <div class="card message" id="bet-result" hidden></div>
+  </section>
 </main>
 <div class="status" id="status"></div>
 <script src="js/config.js"></script>
@@ -67,6 +80,7 @@
 <script src="js/views/welcome.js"></script>
 <script src="js/views/generations.js"></script>
 <script src="js/views/birthday.js"></script>
+<script src="js/views/betting.js"></script>
 <script src="js/participant.js"></script>
 </body>
 </html>

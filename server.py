@@ -13,7 +13,8 @@ Model
             matches (also not grey-grey). 1 box = 1 %.
   Related : match > 0.
 
-Other games (selected by the admin): welcome screen, birthday paradox.
+Other games (selected by the admin): welcome screen, birthday paradox,
+betting (pick 0-3; the admin reveals the answer and sees the winning IDs).
 
 Usage
   python3 server.py [--port 8080] [--admin-password X] [--tunnel]
@@ -166,13 +167,29 @@ def p_shared_birthday(n):
 
 
 # ---------------------------------------------------------------------------
+# Betting (pure functions)
+# ---------------------------------------------------------------------------
+
+BET_CHOICES = (0, 1, 2, 3)
+
+
+def bet_counts(bets):
+    """bets: {id: pick}. Number of participants per choice."""
+    return [sum(1 for v in bets.values() if v == c) for c in BET_CHOICES]
+
+
+def bet_winners(bets, answer):
+    return sorted(pid for pid, v in bets.items() if v == answer)
+
+
+# ---------------------------------------------------------------------------
 # Game state (thread-safe, persisted to JSON)
 # ---------------------------------------------------------------------------
 
 class Game:
     """All state for all games. Participants (token -> ID) are shared by every game."""
 
-    MODES = ("welcome", "generations", "birthday")
+    MODES = ("welcome", "generations", "birthday", "betting")
 
     def __init__(self, state_file, max_participants, seed=None):
         self.state_file = state_file
@@ -188,6 +205,7 @@ class Game:
         self.locked = False
         # id -> {token, last_seen, profile (None = not in this generations round), greyed_last}
         self.participants = {}
+        self.betting = {"round": 1, "open": True, "answer": None}
         self._reset_generations()
 
     def _reset_generations(self):
@@ -212,6 +230,7 @@ class Game:
             self.locked = bool(data["locked"])
             self.participants = {int(k): v for k, v in data["participants"].items()}
             self.history = data.get("history", [])
+            self.betting = data.get("betting", self.betting)
             for p in self.participants.values():
                 if p.get("profile") is not None:
                     assert len(p["profile"]["top"]) == N_COLS
@@ -227,7 +246,8 @@ class Game:
 
     def _save(self):
         data = {"mode": self.mode, "generation": self.generation, "locked": self.locked,
-                "participants": self.participants, "history": self.history}
+                "participants": self.participants, "history": self.history,
+                "betting": self.betting}
         tmp = self.state_file + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(data, fh)
@@ -299,7 +319,25 @@ class Game:
                     same = sorted(i for i, q in self.participants.items()
                                   if i != pid and q.get("birthday") == mine)
                 out["birthday"] = {"birthday": mine, "same_ids": same}
+            elif self.mode == "betting":
+                pick, answer = p.get("bet"), self.betting["answer"]
+                out["betting"] = {"round": self.betting["round"], "open": self.betting["open"],
+                                  "pick": pick, "answer": answer,
+                                  "correct": None if answer is None else pick == answer}
             return 200, out
+
+    def place_bet(self, token, pick):
+        with self.lock:
+            pid = self._find_token(token)
+            if pid is None:
+                return 404, {"error": "unknown"}
+            if pick not in BET_CHOICES or isinstance(pick, bool):
+                return 400, {"error": "bad pick", "message": "Choose 0, 1, 2 or 3."}
+            if not self.betting["open"]:
+                return 409, {"error": "closed", "message": "Betting is closed."}
+            self.participants[pid]["bet"] = pick
+            self._save()
+            return 200, {"ok": True}
 
     def set_birthday(self, token, month, day):
         with self.lock:
@@ -351,6 +389,34 @@ class Game:
             log.info("Birthdays cleared")
             self._save()
 
+    def bet_set_open(self, is_open):
+        with self.lock:
+            self.betting["open"] = bool(is_open)
+            log.info("Betting %s", "opened" if is_open else "closed")
+            self._save()
+
+    def bet_reveal(self, answer):
+        """Close betting and publish the correct answer (can be corrected by revealing again)."""
+        with self.lock:
+            if answer not in BET_CHOICES or isinstance(answer, bool):
+                raise ValueError("answer must be 0, 1, 2 or 3")
+            self.betting.update(open=False, answer=answer)
+            winners = bet_winners(self._bets(), answer)
+            log.info("Betting round %d: answer %d, winners %s",
+                     self.betting["round"], answer, winners)
+            self._save()
+
+    def bet_new_round(self):
+        with self.lock:
+            for p in self.participants.values():
+                p["bet"] = None
+            self.betting = {"round": self.betting["round"] + 1, "open": True, "answer": None}
+            log.info("Betting round %d started", self.betting["round"])
+            self._save()
+
+    def _bets(self):
+        return {i: p["bet"] for i, p in self.participants.items() if p.get("bet") is not None}
+
     def set_locked(self, locked):
         with self.lock:
             self.locked = bool(locked)
@@ -380,7 +446,13 @@ class Game:
                     "max_participants": self.max_participants,
                     "public_url": self.public_url,
                     "participants": parts, "history": self.history,
-                    "birthday": birthday}
+                    "birthday": birthday, "betting": self._betting_summary()}
+
+    def _betting_summary(self):
+        bets, answer = self._bets(), self.betting["answer"]
+        return dict(self.betting, counts=bet_counts(bets),
+                    no_pick=sorted(i for i in self.participants if i not in bets),
+                    winners=None if answer is None else bet_winners(bets, answer))
 
 
 # ---------------------------------------------------------------------------
@@ -452,6 +524,8 @@ class Handler(SimpleHTTPRequestHandler):
                 if not 8 <= len(token) <= 64:
                     return self._json(400, {"error": "bad token"})
                 return self._json(*self.game.join(token))
+            if path == "/api/bet":
+                return self._json(*self.game.place_bet(str(body.get("token", "")), body.get("pick")))
             if path == "/api/birthday":
                 return self._json(*self.game.set_birthday(str(body.get("token", "")),
                                                           body.get("month"), body.get("day")))
@@ -470,6 +544,12 @@ class Handler(SimpleHTTPRequestHandler):
                 self.game.clear_all()
             elif path == "/api/admin/birthday/clear":
                 self.game.clear_birthdays()
+            elif path == "/api/admin/bet/open":
+                self.game.bet_set_open(body.get("open", True))
+            elif path == "/api/admin/bet/reveal":
+                self.game.bet_reveal(body.get("answer"))
+            elif path == "/api/admin/bet/new":
+                self.game.bet_new_round()
             elif path == "/api/admin/lock":
                 self.game.set_locked(body.get("locked", True))
             elif path == "/api/admin/remove":

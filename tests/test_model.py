@@ -68,6 +68,14 @@ class TestBirthday(unittest.TestCase):
         self.assertEqual(server.p_shared_birthday(400), 1.0)
 
 
+class TestBetting(unittest.TestCase):
+    def test_by_hand(self):
+        bets = {0: 0, 1: 2, 2: 2, 3: 3}
+        self.assertEqual(server.bet_winners(bets, 2), [1, 2])
+        self.assertEqual(server.bet_winners(bets, 1), [])
+        self.assertEqual(server.bet_counts(bets), [1, 0, 2, 1])
+
+
 class TestGame(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -104,9 +112,28 @@ class TestGame(unittest.TestCase):
         self.assertEqual(g.me("tokenAAAA")[1]["birthday"]["same_ids"], [2])
         self.assertEqual(g.me("tokenBBBB")[1]["birthday"]["same_ids"], [])
         self.assertEqual(g.admin_state()["birthday"]["groups"], [{"month": 3, "day": 5, "ids": [0, 2]}])
+        # betting: A picks 2, B picks 1 then changes to 2, C picks 3
+        g.set_mode("betting")
+        self.assertEqual(g.place_bet("tokenAAAA", 2)[0], 200)
+        self.assertEqual(g.place_bet("tokenBBBB", 1)[0], 200)
+        self.assertEqual(g.place_bet("tokenBBBB", 2)[0], 200)
+        self.assertEqual(g.place_bet("tokenCCCC", 3)[0], 200)
+        self.assertEqual(g.place_bet("tokenCCCC", 4)[0], 400)
+        self.assertEqual(g.me("tokenAAAA")[1]["betting"]["answer"], None)  # hidden until reveal
+        g.bet_reveal(2)
+        self.assertEqual(g.place_bet("tokenCCCC", 2)[0], 409)  # closed after reveal
+        summary = g.admin_state()["betting"]
+        self.assertEqual((summary["winners"], summary["counts"]), ([0, 1], [0, 0, 2, 1]))
+        self.assertTrue(g.me("tokenBBBB")[1]["betting"]["correct"])
+        self.assertFalse(g.me("tokenCCCC")[1]["betting"]["correct"])
+        g.bet_new_round()
+        self.assertEqual(g.me("tokenAAAA")[1]["betting"],
+                         {"round": 2, "open": True, "pick": None, "answer": None, "correct": None})
+        g.place_bet("tokenAAAA", 1)
         # state survives a restart
         g2 = server.Game(g.state_file, max_participants=5)
-        self.assertEqual((g2.mode, len(g2.participants)), ("birthday", 3))
+        self.assertEqual((g2.mode, len(g2.participants)), ("betting", 3))
+        self.assertEqual((g2.betting["round"], g2.participants[0]["bet"]), (2, 1))
         self.assertEqual(g2.participants[2]["birthday"], [3, 5])
 
 
