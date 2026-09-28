@@ -16,6 +16,12 @@
     $("message").innerHTML = `<h2>${title}</h2><p class="muted">${text}</p>`;
   }
 
+  function showUnreachable() {
+    showMessage("Cannot reach the game server",
+      "Retrying automatically… If you opened a github.io link, the address must end in " +
+      "<b>?server=https://…trycloudflare.com</b> (the https link printed by the server).");
+  }
+
   function buildGenome() {
     // Two blocks of 25 columns; each block holds the top row then the bottom row.
     const genome = $("genome");
@@ -84,8 +90,9 @@
         // Not (or no longer, after a reset) registered: try to join.
         const j = await API.call("POST", "/api/join", { token });
         if (j.status !== 200) {
-          showMessage(j.data.error === "full" ? "All places are taken" : "Too late to join",
-                      j.data.message || "Please wait for the next round.");
+          if (j.data.error === "full") showMessage("All places are taken", j.data.message);
+          else if (j.data.error === "closed") showMessage("Too late to join", j.data.message);
+          else showUnreachable(); // e.g. a github.io link without ?server=
           return;
         }
         r = await API.call("GET", "/api/me?token=" + encodeURIComponent(token));
@@ -94,7 +101,7 @@
       $("status").textContent = "";
     } catch (e) {
       $("status").textContent = "Connection lost — retrying…";
-      if (shownGeneration === null) showMessage("Cannot reach the server", "Retrying automatically…");
+      if (shownGeneration === null) showUnreachable();
     } finally {
       setTimeout(tick, POLL_MS);
     }
