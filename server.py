@@ -139,6 +139,10 @@ def compute_stats(profiles):
 # ---------------------------------------------------------------------------
 
 class Game:
+    """All state for all games. Participants (token -> ID) are shared by every game."""
+
+    MODES = ("welcome", "generations")
+
     def __init__(self, state_file, max_participants, seed=None):
         self.state_file = state_file
         self.max_participants = max_participants
@@ -149,10 +153,17 @@ class Game:
         self._load()
 
     def _reset_fields(self):
-        self.generation = 1
+        self.mode = "welcome"
         self.locked = False
-        self.participants = {}  # id -> {token, profile, greyed_last, last_seen}
+        # id -> {token, last_seen, profile (None = not in this generations round), greyed_last}
+        self.participants = {}
+        self._reset_generations()
+
+    def _reset_generations(self):
+        self.generation = 1
         self.history = []       # one global-stats dict per generation
+        for p in self.participants.values():
+            p["profile"], p["greyed_last"] = new_profile(self.rng), None
         self._dirty = True
         self._per = {}
 
@@ -163,15 +174,19 @@ class Game:
         try:
             with open(self.state_file) as fh:
                 data = json.load(fh)
+            self.mode = data.get("mode", "generations")
+            if self.mode not in self.MODES:
+                self.mode = "welcome"
             self.generation = int(data["generation"])
             self.locked = bool(data["locked"])
             self.participants = {int(k): v for k, v in data["participants"].items()}
             self.history = data.get("history", [])
             for p in self.participants.values():
-                assert len(p["profile"]["top"]) == N_COLS
-                assert len(p["profile"]["bottom"]) == N_COLS
-            log.info("Resumed state: generation %d, %d participants",
-                     self.generation, len(self.participants))
+                if p.get("profile") is not None:
+                    assert len(p["profile"]["top"]) == N_COLS
+                    assert len(p["profile"]["bottom"]) == N_COLS
+            log.info("Resumed state: mode %s, generation %d, %d participants",
+                     self.mode, self.generation, len(self.participants))
         except Exception as exc:  # corrupt state: back it up and start fresh
             backup = f"{self.state_file}.corrupt.{int(time.time())}"
             shutil.copy(self.state_file, backup)
@@ -180,7 +195,7 @@ class Game:
             self._reset_fields()
 
     def _save(self):
-        data = {"generation": self.generation, "locked": self.locked,
+        data = {"mode": self.mode, "generation": self.generation, "locked": self.locked,
                 "participants": self.participants, "history": self.history}
         tmp = self.state_file + ".tmp"
         with open(tmp, "w") as fh:
@@ -195,7 +210,8 @@ class Game:
     def _ensure_stats(self):
         if not self._dirty:
             return
-        per, glob = compute_stats({i: p["profile"] for i, p in self.participants.items()})
+        per, glob = compute_stats({i: p["profile"] for i, p in self.participants.items()
+                                   if p.get("profile") is not None})
         glob["generation"] = self.generation
         self._per = per
         while len(self.history) < self.generation:
@@ -216,14 +232,15 @@ class Game:
             pid = self._find_token(token)
             if pid is not None:
                 return 200, {"id": pid}
-            if self.generation != 1 or self.locked:
-                return 403, {"error": "closed",
-                             "message": "Joining is closed: the demonstration has already started."}
+            if self.locked:
+                return 403, {"error": "closed", "message": "Joining is closed at the moment."}
             free = [i for i in range(self.max_participants) if i not in self.participants]
             if not free:
                 return 409, {"error": "full", "message": "All places are taken."}
             pid = free[0]
-            self.participants[pid] = {"token": token, "profile": new_profile(self.rng),
+            # Only people present in generation 1 take part in the current generations round
+            profile = new_profile(self.rng) if self.generation == 1 else None
+            self.participants[pid] = {"token": token, "profile": profile,
                                       "greyed_last": None, "last_seen": time.time()}
             log.info("Join: id %d", pid)
             self._changed()
@@ -233,29 +250,49 @@ class Game:
         with self.lock:
             pid = self._find_token(token)
             if pid is None:
-                return 404, {"error": "unknown", "joinable": self.generation == 1 and not self.locked}
+                return 404, {"error": "unknown", "joinable": not self.locked}
             p = self.participants[pid]
             p["last_seen"] = time.time()
-            self._ensure_stats()
-            return 200, {"id": pid, "generation": self.generation,
-                         "n_participants": len(self.participants),
-                         "profile": p["profile"], "greyed_last": p["greyed_last"],
-                         "stats": self._per.get(pid)}
+            out = {"id": pid, "mode": self.mode, "n_participants": len(self.participants)}
+            if self.mode == "generations":
+                self._ensure_stats()
+                out["generations"] = {"generation": self.generation,
+                                      "in_round": p.get("profile") is not None,
+                                      "profile": p.get("profile"),
+                                      "greyed_last": p.get("greyed_last"),
+                                      "stats": self._per.get(pid)}
+            return 200, out
 
     # -- admin actions -----------------------------------------------------
+    def set_mode(self, mode):
+        with self.lock:
+            if mode not in self.MODES:
+                raise ValueError(f"unknown mode {mode!r}")
+            self.mode = mode
+            log.info("Mode: %s", mode)
+            self._save()
+
     def next_generation(self):
         with self.lock:
             for p in self.participants.values():
-                p["profile"], p["greyed_last"] = grey_step(p["profile"], self.rng)
+                if p.get("profile") is not None:
+                    p["profile"], p["greyed_last"] = grey_step(p["profile"], self.rng)
             self.generation += 1
-            self.locked = True
             log.info("Advanced to generation %d", self.generation)
             self._changed()
 
-    def reset(self):
+    def reset_generations(self):
+        """New generation-1 profiles for everyone currently registered."""
+        with self.lock:
+            self._reset_generations()
+            log.info("Generations game reset")
+            self._changed()
+
+    def clear_all(self):
+        """Forget all participants (devices rejoin and get new IDs)."""
         with self.lock:
             self._reset_fields()
-            log.info("Game reset")
+            log.info("All participants cleared")
             self._changed()
 
     def set_locked(self, locked):
@@ -274,11 +311,12 @@ class Game:
         with self.lock:
             self._ensure_stats()
             now = time.time()
-            parts = [{"id": i, "profile": p["profile"],
+            parts = [{"id": i, "profile": p.get("profile"),
                       "seen_ago": round(now - p["last_seen"], 1),
                       "stats": self._per.get(i)}
                      for i, p in sorted(self.participants.items())]
-            return {"generation": self.generation, "locked": self.locked,
+            return {"mode": self.mode, "modes": list(self.MODES),
+                    "generation": self.generation, "locked": self.locked,
                     "max_participants": self.max_participants,
                     "public_url": self.public_url,
                     "participants": parts, "history": self.history}
@@ -358,10 +396,14 @@ class Handler(SimpleHTTPRequestHandler):
             if not self._is_admin():
                 err_log.warning("Rejected admin request from %s", self.address_string())
                 return self._json(401, {"error": "unauthorized"})
-            if path == "/api/admin/next":
+            if path == "/api/admin/mode":
+                self.game.set_mode(str(body.get("mode")))
+            elif path == "/api/admin/next":
                 self.game.next_generation()
             elif path == "/api/admin/reset":
-                self.game.reset()
+                self.game.reset_generations()
+            elif path == "/api/admin/clear_all":
+                self.game.clear_all()
             elif path == "/api/admin/lock":
                 self.game.set_locked(body.get("locked", True))
             elif path == "/api/admin/remove":
@@ -369,6 +411,9 @@ class Handler(SimpleHTTPRequestHandler):
             else:
                 return self._json(404, {"error": "not found"})
             self._json(200, {"ok": True})
+        except (ValueError, KeyError, TypeError) as exc:  # bad input from the client
+            err_log.warning("Bad request %s: %s", self.path, exc)
+            self._json(400, {"error": "bad request", "message": str(exc)})
         except Exception:
             err_log.exception("POST %s failed", self.path)
             self._json(500, {"error": "server error"})

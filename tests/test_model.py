@@ -2,6 +2,7 @@
 import os
 import random
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,6 +44,38 @@ class TestModel(unittest.TestCase):
         for col, row in enumerate(rows):
             # exactly the chosen box per column is grey after the first step
             self.assertEqual((q["top"][col] == "X", q["bottom"][col] == "X"), (row == 0, row == 1))
+
+
+class TestGame(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.game = server.Game(os.path.join(self.tmp.name, "s.json"), max_participants=5, seed=1)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_modes_and_late_join(self):
+        g = self.game
+        self.assertEqual(g.mode, "welcome")
+        self.assertEqual(g.join("tokenAAAA"), (200, {"id": 0}))
+        self.assertEqual(g.join("tokenBBBB"), (200, {"id": 1}))
+        self.assertEqual(g.me("tokenAAAA")[1]["mode"], "welcome")
+        g.set_mode("generations")
+        g.next_generation()
+        # late joiner gets an ID but is not part of the running generations round
+        self.assertEqual(g.join("tokenCCCC"), (200, {"id": 2}))
+        late = g.me("tokenCCCC")[1]["generations"]
+        self.assertFalse(late["in_round"])
+        self.assertEqual(g.me("tokenAAAA")[1]["generations"]["stats"]["n_others"], 1)
+        # a new round includes everyone registered
+        g.reset_generations()
+        self.assertTrue(g.me("tokenCCCC")[1]["generations"]["in_round"])
+        self.assertEqual(g.me("tokenAAAA")[1]["generations"]["stats"]["n_others"], 2)
+        with self.assertRaises(ValueError):
+            g.set_mode("nonsense")
+        # state survives a restart
+        g2 = server.Game(g.state_file, max_participants=5)
+        self.assertEqual((g2.mode, len(g2.participants)), ("generations", 3))
 
 
 if __name__ == "__main__":

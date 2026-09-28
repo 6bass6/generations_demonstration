@@ -11,6 +11,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink);
@@ -74,3 +75,13 @@ button:disabled { opacity: .5; cursor: default; }
 .login { max-width: 360px; margin: 15vh auto; }
 .login input { font: inherit; width: 100%; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); margin: 10px 0; }
 @media (max-width: 520px) { .idbox .num { font-size: 44px; } .stat .v { font-size: 30px; } }
+
+/* ---------- welcome + game switching ---------- */
+.welcome { text-align: center; padding: 48px 16px; }
+.welcome-title { font-size: clamp(26px, 6vw, 44px); font-weight: 800; margin: 0 0 18px; line-height: 1.15; }
+.welcome-id { font-size: clamp(96px, 30vw, 180px); font-weight: 900; line-height: 1; margin: 6px 0 20px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.modes { display: flex; gap: 6px; flex-wrap: wrap; }
+.modes button.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.chip.win { background: var(--green); border-color: var(--green); color: #fff; }

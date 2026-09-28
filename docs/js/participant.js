@@ -1,4 +1,5 @@
-// Participant page: join once (token kept in localStorage), then poll /api/me.
+// Participant page core: join once (token kept in localStorage), poll /api/me,
+// and show the view of the game the admin has selected (see js/views/*.js).
 (function () {
   const POLL_MS = 1500;
   const $ = (id) => document.getElementById(id);
@@ -7,11 +8,16 @@
     token = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).replace(/-/g, "");
     API.store("gen_token", token);
   }
-  let shownGeneration = null;
-  let boxes = null; // [row][col] -> element
+  let connected = false;
+  let timer = null, busy = false; // one polling loop only
+
+  function hideViews() {
+    document.querySelectorAll("section[id^='view-']").forEach((el) => (el.hidden = true));
+  }
 
   function showMessage(title, text) {
-    $("game").hidden = true;
+    hideViews();
+    $("topbar").hidden = true;
     $("message").hidden = false;
     $("message").innerHTML = `<h2>${title}</h2><p class="muted">${text}</p>`;
   }
@@ -22,72 +28,25 @@
       "<b>?server=https://…trycloudflare.com</b> (the https link printed by the server).");
   }
 
-  function buildGenome() {
-    // Two blocks of 25 columns; each block holds the top row then the bottom row.
-    const genome = $("genome");
-    genome.innerHTML = "";
-    boxes = [[], []];
-    for (let b = 0; b < 2; b++) {
-      const block = document.createElement("div");
-      block.className = "block";
-      for (let row = 0; row < 2; row++) {
-        for (let c = 0; c < 25; c++) {
-          const el = document.createElement("div");
-          el.className = "box";
-          block.appendChild(el);
-          boxes[row][b * 25 + c] = el;
-        }
-      }
-      genome.appendChild(block);
-    }
-  }
-
-  function tieText(entry) {
-    if (!entry) return "";
-    return `with ID ${entry.id}` + (entry.ties ? ` (+${entry.ties} more)` : "");
-  }
-
   function render(d) {
+    const view = VIEWS[d.mode];
+    if (!view) return showMessage("Please wait", "The next game is being prepared.");
     $("message").hidden = true;
-    $("game").hidden = false;
-    if (!boxes) buildGenome();
+    document.querySelectorAll("section[id^='view-']").forEach((el) => (el.hidden = el.id !== "view-" + d.mode));
+    $("topbar").hidden = !view.topbar;
     $("myid").textContent = d.id;
-    $("gen").textContent = "Generation " + d.generation;
-    const newGen = shownGeneration !== null && shownGeneration !== d.generation;
-    const rows = [d.profile.top, d.profile.bottom];
-    for (let row = 0; row < 2; row++) {
-      for (let col = 0; col < 50; col++) {
-        const el = boxes[row][col];
-        el.className = "box " + rows[row][col];
-        if (newGen && d.greyed_last && d.greyed_last[col] === row) {
-          void el.offsetWidth; // restart animation
-          el.classList.add("fresh");
-        }
-      }
-    }
-    shownGeneration = d.generation;
-    const s = d.stats;
-    if (!s || !s.n_others) {
-      ["best", "worst", "mean", "related"].forEach((k) => ($(k).textContent = "–"));
-      $("bestid").textContent = "waiting for others to join";
-      $("worstid").textContent = "";
-      $("relatedof").textContent = "";
-      return;
-    }
-    $("best").textContent = s.best.pct + "%";
-    $("bestid").textContent = tieText(s.best);
-    $("worst").textContent = s.worst.pct + "%";
-    $("worstid").textContent = tieText(s.worst);
-    $("mean").textContent = s.mean.toFixed(1) + "%";
-    $("related").textContent = s.related;
-    $("relatedof").textContent = `of ${s.n_others} other participants`;
+    if (view.label) $("modelabel").textContent = view.label(d);
+    view.render(d, { token });
   }
 
   async function tick() {
+    if (busy) return;
+    busy = true;
+    clearTimeout(timer);
     try {
       let r = await API.call("GET", "/api/me?token=" + encodeURIComponent(token));
       if (r.status === 404) {
-        // Not (or no longer, after a reset) registered: try to join.
+        // Not (or no longer, after clearing) registered: try to join.
         const j = await API.call("POST", "/api/join", { token });
         if (j.status !== 200) {
           if (j.data.error === "full") showMessage("All places are taken", j.data.message);
@@ -97,14 +56,17 @@
         }
         r = await API.call("GET", "/api/me?token=" + encodeURIComponent(token));
       }
-      if (r.status === 200) render(r.data);
+      if (r.status === 200) { connected = true; render(r.data); }
       $("status").textContent = "";
     } catch (e) {
       $("status").textContent = "Connection lost — retrying…";
-      if (shownGeneration === null) showUnreachable();
+      if (!connected) showUnreachable();
     } finally {
-      setTimeout(tick, POLL_MS);
+      busy = false;
+      timer = setTimeout(tick, POLL_MS);
     }
   }
+  // Views can ask for an immediate refresh after the participant did something.
+  window.refreshNow = tick;
   tick();
 })();

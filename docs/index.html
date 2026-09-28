@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Generations</title>
+<title>Arwin's World of Chance</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -11,33 +11,46 @@
 <main>
   <div id="message" class="card message"><h2>Connecting…</h2><p class="muted">One moment please.</p></div>
 
-  <div id="game" hidden>
-    <div class="top">
-      <div class="idbox"><span class="label">Your ID</span><span class="num" id="myid">–</span></div>
-      <div class="gen" id="gen">Generation 1</div>
-    </div>
-
-    <div class="card" style="margin-bottom:16px">
-      <div class="genome" id="genome"></div>
-      <div class="legend">
-        <span><i style="background:var(--red)"></i>red</span>
-        <span><i style="background:var(--green)"></i>green</span>
-        <span><i style="background:var(--grey)"></i>DNA from an unrelated partner</span>
-      </div>
-    </div>
-
-    <div class="stats">
-      <div class="card stat"><div class="k">Best match</div><div class="v" id="best">–</div><div class="s" id="bestid"></div></div>
-      <div class="card stat"><div class="k">Worst match</div><div class="v" id="worst">–</div><div class="s" id="worstid"></div></div>
-      <div class="card stat"><div class="k">Mean match</div><div class="v" id="mean">–</div><div class="s">over all others</div></div>
-      <div class="card stat"><div class="k">Related to</div><div class="v" id="related">–</div><div class="s" id="relatedof"></div></div>
-    </div>
-    <p class="muted" style="text-align:center;font-size:14px">Each box with the same colour at the same place as someone else counts as 1%. Grey boxes never match.</p>
+  <div class="top" id="topbar" hidden>
+    <div class="idbox"><span class="label">Your ID</span><span class="num" id="myid">–</span></div>
+    <div class="gen" id="modelabel"></div>
   </div>
+
+  <!-- welcome -->
+  <section id="view-welcome" class="card welcome" hidden>
+    <p class="welcome-title">Welcome to Arwin's world of Chance</p>
+    <p class="muted">your ID number is</p>
+    <div class="welcome-id" id="welcome-id">–</div>
+    <p class="muted">Keep this page open — the game will start here.</p>
+  </section>
+
+  <!-- generations -->
+  <section id="view-generations" hidden>
+    <div id="gen-out" class="card message" hidden><h2>Wait for the next round</h2><p class="muted">You joined after this round started. You will take part when the admin starts a new round.</p></div>
+    <div id="gen-in">
+      <div class="card" style="margin-bottom:16px">
+        <div class="genome" id="genome"></div>
+        <div class="legend">
+          <span><i style="background:var(--red)"></i>red</span>
+          <span><i style="background:var(--green)"></i>green</span>
+          <span><i style="background:var(--grey)"></i>DNA from an unrelated partner</span>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="card stat"><div class="k">Best match</div><div class="v" id="best">–</div><div class="s" id="bestid"></div></div>
+        <div class="card stat"><div class="k">Worst match</div><div class="v" id="worst">–</div><div class="s" id="worstid"></div></div>
+        <div class="card stat"><div class="k">Mean match</div><div class="v" id="mean">–</div><div class="s">over all others</div></div>
+        <div class="card stat"><div class="k">Related to</div><div class="v" id="related">–</div><div class="s" id="relatedof"></div></div>
+      </div>
+      <p class="muted" style="text-align:center;font-size:14px">Each box with the same colour at the same place as someone else counts as 1%. Grey boxes never match.</p>
+    </div>
+  </section>
 </main>
 <div class="status" id="status"></div>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
+<script src="js/views/welcome.js"></script>
+<script src="js/views/generations.js"></script>
 <script src="js/participant.js"></script>
 </body>
 </html>
