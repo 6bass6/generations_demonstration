@@ -26,6 +26,7 @@ import re
 import secrets
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -400,6 +401,16 @@ def start_tunnel(port, game, binary):
     return proc
 
 
+def lan_ip():
+    """Best guess of this machine's network address (no packets are sent)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("10.255.255.255", 1))
+            return s.getsockname()[0]
+    except OSError:
+        return "localhost"
+
+
 def setup_logging(log_dir):
     os.makedirs(log_dir, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
@@ -446,8 +457,9 @@ def main():
     ThreadingHTTPServer.daemon_threads = True
     server = ThreadingHTTPServer((args.host, args.port), Handler)
 
-    print(f"\n  Participants: http://<this-machine>:{args.port}/")
-    print(f"  Admin panel : http://<this-machine>:{args.port}/admin.html")
+    host = lan_ip()
+    print(f"\n  Participants: http://{host}:{args.port}/")
+    print(f"  Admin panel : http://{host}:{args.port}/admin.html")
     if not args.admin_password:
         print(f"  Admin password: {password}")
     print(flush=True)
