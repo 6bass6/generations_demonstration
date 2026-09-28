@@ -79,13 +79,42 @@
         <div class="people" id="people"></div>
       </div>
     </section>
+
+    <!-- birthday paradox -->
+    <section id="admin-birthday" hidden>
+      <div class="top">
+        <h1>Birthday paradox</h1>
+        <button id="bday-clear" class="danger">Clear birthdays</button>
+      </div>
+      <div class="admin-grid">
+        <div class="card">
+          <div class="muted">Birthdays entered</div>
+          <div class="big" id="bday-n">0</div>
+          <div class="kv" style="margin-top:10px">
+            <span class="muted">Shared birthdays</span><b id="bday-groups">–</b>
+            <span class="muted">People sharing</span><b id="bday-people">–</b>
+          </div>
+        </div>
+        <div class="card">
+          <div class="muted">Chance that at least two of <span id="bday-n2">0</span> people share a birthday</div>
+          <div class="big" id="bday-p">–</div>
+          <div class="muted" style="font-size:14px">23 people → 50.7% · 30 → 70.6% · 50 → 97.0% · 70 → 99.9%</div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px">Same birthday</h3>
+        <div id="bday-list"></div>
+      </div>
+    </section>
   </div>
 </main>
 <div class="status" id="status"></div>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
+<script src="js/months.js"></script>
 <script src="js/admin/welcome.js"></script>
 <script src="js/admin/generations.js"></script>
+<script src="js/admin/birthday.js"></script>
 <script src="js/admin.js"></script>
 </body>
 </html>

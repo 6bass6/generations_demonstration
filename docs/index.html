@@ -45,12 +45,28 @@
       <p class="muted" style="text-align:center;font-size:14px">Each box with the same colour at the same place as someone else counts as 1%. Grey boxes never match.</p>
     </div>
   </section>
+
+  <!-- birthday paradox -->
+  <section id="view-birthday" hidden>
+    <div class="card" style="margin-bottom:16px">
+      <h2 style="margin-bottom:12px">When is your birthday?</h2>
+      <div class="row">
+        <select id="bday-day" aria-label="Day"></select>
+        <select id="bday-month" aria-label="Month"></select>
+        <button id="bday-save" class="primary">Save</button>
+      </div>
+      <p class="muted" id="bday-saved" style="margin:10px 0 0"></p>
+    </div>
+    <div class="card message" id="bday-result"></div>
+  </section>
 </main>
 <div class="status" id="status"></div>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
+<script src="js/months.js"></script>
 <script src="js/views/welcome.js"></script>
 <script src="js/views/generations.js"></script>
+<script src="js/views/birthday.js"></script>
 <script src="js/participant.js"></script>
 </body>
 </html>

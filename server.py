@@ -13,6 +13,8 @@ Model
             matches (also not grey-grey). 1 box = 1 %.
   Related : match > 0.
 
+Other games (selected by the admin): welcome screen, birthday paradox.
+
 Usage
   python3 server.py [--port 8080] [--admin-password X] [--tunnel]
 """
@@ -135,13 +137,42 @@ def compute_stats(profiles):
 
 
 # ---------------------------------------------------------------------------
+# Birthday paradox (pure functions)
+# ---------------------------------------------------------------------------
+
+DAYS_IN_MONTH = (31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)  # 29 Feb allowed
+
+
+def valid_birthday(month, day):
+    return (isinstance(month, int) and isinstance(day, int)
+            and 1 <= month <= 12 and 1 <= day <= DAYS_IN_MONTH[month - 1])
+
+
+def birthday_groups(birthdays):
+    """birthdays: {id: (month, day)}. Returns groups of >=2 IDs sharing a day+month."""
+    by_date = {}
+    for pid, (month, day) in birthdays.items():
+        by_date.setdefault((month, day), []).append(pid)
+    return [{"month": m, "day": d, "ids": sorted(ids)}
+            for (m, d), ids in sorted(by_date.items()) if len(ids) > 1]
+
+
+def p_shared_birthday(n):
+    """Chance that at least two of n people share a birthday (365 equally likely days)."""
+    p_all_different = 1.0
+    for i in range(min(n, 366)):
+        p_all_different *= (365 - i) / 365
+    return 1.0 - p_all_different
+
+
+# ---------------------------------------------------------------------------
 # Game state (thread-safe, persisted to JSON)
 # ---------------------------------------------------------------------------
 
 class Game:
     """All state for all games. Participants (token -> ID) are shared by every game."""
 
-    MODES = ("welcome", "generations")
+    MODES = ("welcome", "generations", "birthday")
 
     def __init__(self, state_file, max_participants, seed=None):
         self.state_file = state_file
@@ -261,7 +292,25 @@ class Game:
                                       "profile": p.get("profile"),
                                       "greyed_last": p.get("greyed_last"),
                                       "stats": self._per.get(pid)}
+            elif self.mode == "birthday":
+                mine = p.get("birthday")
+                same = []
+                if mine:
+                    same = sorted(i for i, q in self.participants.items()
+                                  if i != pid and q.get("birthday") == mine)
+                out["birthday"] = {"birthday": mine, "same_ids": same}
             return 200, out
+
+    def set_birthday(self, token, month, day):
+        with self.lock:
+            pid = self._find_token(token)
+            if pid is None:
+                return 404, {"error": "unknown"}
+            if not valid_birthday(month, day):
+                return 400, {"error": "bad date", "message": "That date does not exist."}
+            self.participants[pid]["birthday"] = [month, day]
+            self._save()
+            return 200, {"ok": True}
 
     # -- admin actions -----------------------------------------------------
     def set_mode(self, mode):
@@ -295,6 +344,13 @@ class Game:
             log.info("All participants cleared")
             self._changed()
 
+    def clear_birthdays(self):
+        with self.lock:
+            for p in self.participants.values():
+                p["birthday"] = None
+            log.info("Birthdays cleared")
+            self._save()
+
     def set_locked(self, locked):
         with self.lock:
             self.locked = bool(locked)
@@ -311,7 +367,11 @@ class Game:
         with self.lock:
             self._ensure_stats()
             now = time.time()
-            parts = [{"id": i, "profile": p.get("profile"),
+            bdays = {i: tuple(p["birthday"]) for i, p in self.participants.items()
+                     if p.get("birthday")}
+            birthday = {"n_entered": len(bdays), "groups": birthday_groups(bdays),
+                        "p_shared": p_shared_birthday(len(bdays))}
+            parts = [{"id": i, "profile": p.get("profile"), "birthday": p.get("birthday"),
                       "seen_ago": round(now - p["last_seen"], 1),
                       "stats": self._per.get(i)}
                      for i, p in sorted(self.participants.items())]
@@ -319,7 +379,8 @@ class Game:
                     "generation": self.generation, "locked": self.locked,
                     "max_participants": self.max_participants,
                     "public_url": self.public_url,
-                    "participants": parts, "history": self.history}
+                    "participants": parts, "history": self.history,
+                    "birthday": birthday}
 
 
 # ---------------------------------------------------------------------------
@@ -391,6 +452,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if not 8 <= len(token) <= 64:
                     return self._json(400, {"error": "bad token"})
                 return self._json(*self.game.join(token))
+            if path == "/api/birthday":
+                return self._json(*self.game.set_birthday(str(body.get("token", "")),
+                                                          body.get("month"), body.get("day")))
             if not path.startswith("/api/admin/"):
                 return self._json(404, {"error": "not found"})
             if not self._is_admin():
@@ -404,6 +468,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.game.reset_generations()
             elif path == "/api/admin/clear_all":
                 self.game.clear_all()
+            elif path == "/api/admin/birthday/clear":
+                self.game.clear_birthdays()
             elif path == "/api/admin/lock":
                 self.game.set_locked(body.get("locked", True))
             elif path == "/api/admin/remove":
