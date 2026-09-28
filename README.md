@@ -1,9 +1,16 @@
-# Generations demonstration
+# Arwin's World of Chance
 
-A live classroom demo of how shared DNA between relatives decays over generations.
-Up to 100 devices join, each gets an ID (0–99) and a 2×50 box "genome".
+Live classroom demos on up to 100 devices. Every device gets an ID (0–99) that it keeps in all games.
+The admin panel chooses what everyone is playing:
 
-## The model
+| game | what participants do / see | what the admin sees |
+|---|---|---|
+| **Welcome** (default) | "Welcome to Arwin's world of Chance, your ID number is N" | the IDs that have joined |
+| **Generations** | a 2×50 box "genome" and how related they are to others | controls, charts, all genomes |
+| **Birthday paradox** | enter day + month; see which IDs share it | all shared birthdays + theoretical chance |
+| **Betting** | pick 0, 1, 2 or 3 (only their own pick is shown) | live counts; type the answer → winning IDs |
+
+## Generations: the model
 
 - **Generation 1:** in every column the top box is red or green at random (50/50); the bottom box is the other colour.
 - **Every next generation:** in every column, the top or the bottom box (50/50) turns grey — DNA from an
@@ -37,12 +44,15 @@ and prints a public `https://….trycloudflare.com` link. The link changes each 
 
 Open `/admin.html`, log in, and project the join link / QR code. Then:
 
-1. Let everyone join (generation 1). Joining closes automatically once you go to generation 2
-   (you can also lock it manually).
-2. Press **Next generation** to grey out boxes; repeat.
-3. **Reset** clears everything for a new round (devices rejoin automatically).
-
-Faded cards in the admin panel are devices that have not checked in for 15 s (e.g. closed tab); **✕** removes one.
+1. Let everyone join; they see the welcome screen with their ID. **Lock joining** stops new devices.
+2. Pick a game at the top of the admin panel; all devices switch within ~2 seconds.
+3. **Generations:** press **Next generation** to grey out boxes; repeat. **New round** deals fresh
+   generation-1 genomes to everyone registered. Devices that join after generation 1 wait for the next round.
+   Faded cards are devices that have not checked in for 15 s (e.g. closed tab); **✕** removes one.
+4. **Birthday paradox:** participants enter their birthday; **Clear birthdays** empties the list.
+5. **Betting:** participants tap a number; **Close betting**, type the correct number and **Reveal** to get
+   the winners (revealing also closes betting; reveal again to correct a typo). **New round** clears all bets.
+6. **Clear all participants** forgets every device (they rejoin with new IDs) and all game data.
 
 ### Options
 
