@@ -30,7 +30,7 @@ button.danger { color: var(--red); }
 button:disabled { opacity: .5; cursor: default; }
 
 /* ---------- participant ---------- */
-.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .idbox { display: flex; align-items: baseline; gap: 10px; }
 .idbox .label { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .08em; }
 .idbox .num { font-size: 56px; font-weight: 800; font-variant-numeric: tabular-nums; }
