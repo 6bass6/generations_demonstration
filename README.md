@@ -9,6 +9,7 @@ The admin panel chooses what everyone is playing:
 | **Generations** | a 2×50 box "genome" and how related they are to others | controls, charts, all genomes |
 | **Birthday paradox** | enter day + month; see which IDs share it | all shared birthdays + theoretical chance |
 | **Betting** | pick 0, 1, 2 or 3 (only their own pick is shown) | live counts; type the answer → winning IDs |
+| **Y-STR** | one block per Y-STR marker, their changed markers, how many others share their haplotype | panel switch, generations, % still identical to the start, differentiated IDs |
 
 ## Generations: the model
 
@@ -23,6 +24,20 @@ Each participant sees their ID, their genome, best match (with ID), worst match 
 and how many others they are still related to. Because *both* people in a pair lose half of their boxes each
 generation, the mean match drops about 4× per generation (≈50% → 12% → 3% → 0.8% …); after 5–8
 generations only a handful of pairs are still related.
+
+## Y-STR: the model
+
+- Two panels: **PowerPlex Y23** (22 blocks; DYS385 is one block) and **RMplex** (30 blocks), with a
+  per-generation mutation rate per marker (the tables are in `YSTR_PANELS` in `server.py`).
+- **Generation 0:** every participant is an independent male line with the same starting haplotype:
+  allele 10 on every marker.
+- **Every next generation:** each marker of each participant goes up one repeat with probability rate/2
+  (red) or down one with probability rate/2 (green). Alleles keep changing, so 10 → 11 → 12 or back to 10
+  is possible; a block at 10 is plain again.
+- Participants see their blocks, their changed markers with name and allele (e.g. `DYS458: 11`) and the
+  number of **other** participants with exactly the same haplotype.
+- The admin sees the % of participants still identical to the starting haplotype and the IDs that differ,
+  with their changed markers. Per generation about 8% of men get at least one mutation on PowerPlex Y23 and about 45% on RMplex.
 
 ## Running it
 
@@ -52,7 +67,10 @@ Open `/admin.html`, log in, and project the join link / QR code. Then:
 4. **Birthday paradox:** participants enter their birthday; **Clear birthdays** empties the list.
 5. **Betting:** participants tap a number; **Close betting**, type the correct number and **Reveal** to get
    the winners (revealing also closes betting; reveal again to correct a typo). **New round** clears all bets.
-6. **Clear all participants** forgets every device (they rejoin with new IDs) and all game data.
+6. **Y-STR:** choose **PowerPlex Y23** or **RMplex** (switching restarts at generation 0), then press
+   **Next generation**; **Restart** sends everyone back to allele 10. Devices that join after generation 0
+   wait for the next round.
+7. **Clear all participants** forgets every device (they rejoin with new IDs) and all game data.
 
 ### Options
 
