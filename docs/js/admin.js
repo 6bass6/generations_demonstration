@@ -2,7 +2,7 @@
 // shared controls. Each game's section is rendered by js/admin/<mode>.js.
 (function () {
   const POLL_MS = 2000;
-  const MODE_NAMES = { welcome: "Welcome", generations: "Generations", birthday: "Birthday paradox", betting: "Betting" };
+  const MODE_NAMES = { welcome: "Welcome", generations: "Generations", birthday: "Birthday paradox", betting: "Betting", ystr: "Y-STR" };
   const $ = (id) => document.getElementById(id);
   let password = null;
   try { password = sessionStorage.getItem("gen_admin_pw"); } catch (e) { /* ignore */ }

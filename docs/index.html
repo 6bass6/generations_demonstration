@@ -60,6 +60,28 @@
     <div class="card message" id="bday-result"></div>
   </section>
 
+  <!-- Y-STR -->
+  <section id="view-ystr" hidden>
+    <div id="ystr-out" class="card message" hidden><h2>Wait for the next round</h2><p class="muted">You joined after this round started. You will take part when the admin starts a new round.</p></div>
+    <div id="ystr-in">
+      <div class="card" style="margin-bottom:16px">
+        <div class="strblocks" id="ystr-blocks"></div>
+        <div class="legend">
+          <span><i style="background:var(--red)"></i>one repeat more</span>
+          <span><i style="background:var(--green)"></i>one repeat less</span>
+          <span><i style="background:var(--line)"></i>unchanged (allele 10)</span>
+        </div>
+      </div>
+      <div class="stats" style="margin-bottom:16px">
+        <div class="card stat"><div class="k">Same haplotype</div><div class="v" id="ystr-shared">–</div><div class="s" id="ystr-sharedof"></div></div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px">Your changed markers</h3>
+        <div class="chips" id="ystr-changes"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- betting -->
   <section id="view-betting" hidden>
     <div class="card" style="margin-bottom:16px">
@@ -81,6 +103,7 @@
 <script src="js/views/generations.js"></script>
 <script src="js/views/birthday.js"></script>
 <script src="js/views/betting.js"></script>
+<script src="js/views/ystr.js"></script>
 <script src="js/participant.js"></script>
 </body>
 </html>

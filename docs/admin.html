@@ -107,6 +107,34 @@
       </div>
     </section>
 
+    <!-- Y-STR -->
+    <section id="admin-ystr" hidden>
+      <div class="top">
+        <div><h1 id="ystr-title">Y-STR</h1><div class="modes" id="ystr-panels" style="margin-top:8px"></div></div>
+        <div class="row">
+          <button id="ystr-reset" class="danger">Restart</button>
+          <button id="ystr-next" class="primary">Next generation →</button>
+        </div>
+      </div>
+      <div class="admin-grid">
+        <div class="card">
+          <div class="muted">Same haplotype as the start (all allele 10)</div>
+          <div class="big" id="ystr-pct">–</div>
+          <div class="muted" id="ystr-nstart"></div>
+        </div>
+        <div class="card">
+          <div class="kv">
+            <span class="muted">Differentiated</span><b id="ystr-ndiff">–</b>
+            <span class="muted">Different haplotypes</span><b id="ystr-nhap">–</b>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin-bottom:10px">Differentiated IDs</h3>
+        <div id="ystr-diff"></div>
+      </div>
+    </section>
+
     <!-- betting -->
     <section id="admin-betting" hidden>
       <div class="top">
@@ -146,6 +174,7 @@
 <script src="js/admin/generations.js"></script>
 <script src="js/admin/birthday.js"></script>
 <script src="js/admin/betting.js"></script>
+<script src="js/admin/ystr.js"></script>
 <script src="js/admin.js"></script>
 </body>
 </html>
