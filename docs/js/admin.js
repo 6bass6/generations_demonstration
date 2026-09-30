@@ -37,7 +37,7 @@
   };
   window.ADMIN = ctx;
 
-  $("clearall").onclick = () => ctx.action("/api/admin/clear_all", {}, "Forget ALL participants? Every device gets a new ID and all game data is cleared.");
+  $("clearall").onclick = () => ctx.action("/api/admin/clear_all", {}, "Forget ALL participants? All game data is cleared and devices must scan the link (or reload) to rejoin.");
   $("lock").onclick = () => ctx.action("/api/admin/lock", { locked: !state.locked });
 
   function renderModes() {

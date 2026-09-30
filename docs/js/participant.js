@@ -9,6 +9,8 @@
     API.store("gen_token", token);
   }
   let connected = false;
+  let hadId = false;   // this page has been registered since it was opened
+  let stopped = false; // set after an admin reset: no polling until the page is reopened
   let timer = null, busy = false; // one polling loop only
 
   function hideViews() {
@@ -45,8 +47,14 @@
     clearTimeout(timer);
     try {
       let r = await API.call("GET", "/api/me?token=" + encodeURIComponent(token));
+      if (r.status === 404 && hadId) {
+        // The admin cleared all participants: only rejoin when the link is scanned/reloaded.
+        stopped = true;
+        showMessage("The game was reset", "Scan the QR code or reload this page to join again.");
+        return;
+      }
       if (r.status === 404) {
-        // Not (or no longer, after clearing) registered: try to join.
+        // Just opened and not registered yet: join.
         const j = await API.call("POST", "/api/join", { token });
         if (j.status !== 200) {
           if (j.data.error === "full") showMessage("All places are taken", j.data.message);
@@ -56,17 +64,17 @@
         }
         r = await API.call("GET", "/api/me?token=" + encodeURIComponent(token));
       }
-      if (r.status === 200) { connected = true; render(r.data); }
+      if (r.status === 200) { connected = hadId = true; render(r.data); }
       $("status").textContent = "";
     } catch (e) {
       $("status").textContent = "Connection lost — retrying…";
       if (!connected) showUnreachable();
     } finally {
       busy = false;
-      timer = setTimeout(tick, POLL_MS);
+      if (!stopped) timer = setTimeout(tick, POLL_MS);
     }
   }
   // Views can ask for an immediate refresh after the participant did something.
-  window.refreshNow = tick;
+  window.refreshNow = () => { if (!stopped) tick(); };
   tick();
 })();

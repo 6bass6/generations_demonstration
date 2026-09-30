@@ -81,7 +81,8 @@ Open `/admin.html`, log in, and project the join link / QR code. Then:
 6. **Y-STR:** choose **PowerPlex Y23** or **RMplex** (switching restarts at generation 0), then press
    **Next generation**; **Restart** sends everyone back to allele 10. Devices that join after generation 0
    wait for the next round.
-7. **Clear all participants** forgets every device (they rejoin with new IDs) and all game data.
+7. **Clear all participants** forgets every device and all game data. Open pages show "The game was reset"
+   and stop; a device only rejoins (with a new ID) when the link/QR code is scanned again or the page is reloaded.
 
 ### Options
 
