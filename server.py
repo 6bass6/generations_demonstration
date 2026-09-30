@@ -779,7 +779,12 @@ def main():
     ap.add_argument("--tunnel", action="store_true",
                     help="expose the server publicly via a cloudflared quick tunnel")
     ap.add_argument("--cloudflared", default="cloudflared", help="path to cloudflared")
+    ap.add_argument("--public-url", default=None,
+                    help="public link of a tunnel you run yourself (shown in the admin panel); "
+                         "the link then survives server restarts")
     args = ap.parse_args()
+    if args.tunnel and args.public_url:
+        ap.error("use either --tunnel or --public-url, not both")
 
     setup_logging(args.log_dir)
     password = args.admin_password or secrets.token_urlsafe(6)
@@ -787,6 +792,8 @@ def main():
     log.info("Arguments: %s", shown)
 
     game = Game(args.state_file, args.max_participants, args.seed)
+    if args.public_url:
+        game.public_url = args.public_url.rstrip("/")
     Handler.game = game
     Handler.admin_password = password
     # Default listen backlog (5) drops connections when many devices join at once
@@ -799,6 +806,8 @@ def main():
     print(f"  Admin panel : http://{host}:{args.port}/admin.html")
     if not args.admin_password:
         print(f"  Admin password: {password}")
+    if game.public_url:
+        print(f"  Public URL  : {game.public_url}")
     print(flush=True)
 
     tunnel = start_tunnel(args.port, game, args.cloudflared) if args.tunnel else None

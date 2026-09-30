@@ -57,6 +57,17 @@ python3 server.py --admin-password <choose-one> --tunnel
 This starts a free Cloudflare quick tunnel (`cloudflared` must be on the PATH, or pass `--cloudflared /path/to/cloudflared`)
 and prints a public `https://….trycloudflare.com` link. The link changes each time the server starts.
 
+To keep the **same link across server restarts**, run the tunnel on its own and tell the server its link:
+
+```bash
+nohup cloudflared tunnel --no-autoupdate --url http://localhost:8080 > logs/tunnel.log 2>&1 &
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' logs/tunnel.log | head -1     # the public link
+python3 server.py --admin-password <choose-one> --public-url https://….trycloudflare.com
+```
+
+Now the server can be stopped and restarted freely; the link only changes when the tunnel itself stops
+(e.g. a reboot). Stop the tunnel with `kill <PID>` (find it with `pgrep -ax cloudflared`).
+
 Open `/admin.html`, log in, and project the join link / QR code. Then:
 
 1. Let everyone join; they see the welcome screen with their ID. **Lock joining** stops new devices.
@@ -83,7 +94,8 @@ Open `/admin.html`, log in, and project the join link / QR code. Then:
 | `--state-file` | `state.json` | game state; the server resumes from it after a restart |
 | `--log-dir` | `logs/` | `server.log` (all events) and `error.log` (warnings/errors) |
 | `--seed` | none | fixed random seed (testing) |
-| `--tunnel` | off | public link via cloudflared |
+| `--tunnel` | off | public link via cloudflared (new link on every start) |
+| `--public-url` | none | link of a tunnel you run yourself; shown in the admin panel (not with `--tunnel`) |
 
 ## Hosting the pages on GitHub Pages
 
