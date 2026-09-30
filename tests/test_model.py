@@ -76,6 +76,47 @@ class TestBetting(unittest.TestCase):
         self.assertEqual(server.bet_counts(bets), [1, 0, 2, 1])
 
 
+class FixedRandom:
+    """Returns the given numbers from random(), in order."""
+    def __init__(self, values):
+        self.values = list(values)
+
+    def random(self):
+        return self.values.pop(0)
+
+
+class TestYstr(unittest.TestCase):
+    def test_step_hand_case(self):
+        # rate 0.1: u < 0.05 -> +1, 0.05 <= u < 0.1 -> -1, u >= 0.1 -> unchanged
+        alleles, changed = server.ystr_step([10, 10, 10, 12], [0.1] * 4,
+                                            FixedRandom([0.01, 0.07, 0.5, 0.0499]))
+        self.assertEqual(alleles, [11, 9, 10, 13])
+        self.assertEqual(changed, [0, 1, 3])
+
+    def test_step_rate(self):
+        # with rate 0.2, ~10% go up and ~10% go down
+        rng = random.Random(3)
+        ups = downs = 0
+        for _ in range(20000):
+            (a,), _ = server.ystr_step([10], [0.2], rng)
+            ups += a == 11
+            downs += a == 9
+        self.assertAlmostEqual(ups / 20000, 0.1, delta=0.01)
+        self.assertAlmostEqual(downs / 20000, 0.1, delta=0.01)
+
+    def test_stats_hand_case(self):
+        # 0 and 1 unchanged, 2 and 3 share the same mutation, 4 has its own
+        s = server.ystr_stats({0: [10, 10], 1: [10, 10], 2: [11, 10], 3: [11, 10], 4: [10, 9]})
+        self.assertEqual((s["n"], s["n_start"], s["pct_start"]), (5, 2, 40.0))
+        self.assertEqual(s["differ_ids"], [2, 3, 4])
+        self.assertEqual(s["n_haplotypes"], 3)
+        self.assertEqual(s["shared"], {0: 1, 1: 1, 2: 1, 3: 1, 4: 0})
+
+    def test_panels(self):
+        self.assertEqual(len(server.YSTR_PANELS["ppy23"]["markers"]), 22)
+        self.assertEqual(len(server.YSTR_PANELS["rmplex"]["markers"]), 30)
+
+
 class TestGame(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -135,6 +176,37 @@ class TestGame(unittest.TestCase):
         self.assertEqual((g2.mode, len(g2.participants)), ("betting", 3))
         self.assertEqual((g2.betting["round"], g2.participants[0]["bet"]), (2, 1))
         self.assertEqual(g2.participants[2]["birthday"], [3, 5])
+
+    def test_ystr_round(self):
+        g = self.game
+        g.join("tokenAAAA")
+        g.join("tokenBBBB")
+        g.set_mode("ystr")
+        me = g.me("tokenAAAA")[1]["ystr"]
+        self.assertEqual((me["panel"], me["generation"]), ("PowerPlex Y23", 0))
+        self.assertEqual(me["alleles"], [10] * 22)
+        self.assertEqual(me["shared_with"], 1)  # everyone starts identical
+        g.ystr_next()
+        g.join("tokenCCCC")  # late joiner sits this round out
+        self.assertFalse(g.me("tokenCCCC")[1]["ystr"]["in_round"])
+        # force a known difference: A mutated on marker 0, B did not
+        g.participants[0]["ystr"] = [11] + [10] * 21
+        g.participants[1]["ystr"] = [10] * 22
+        self.assertEqual(g.me("tokenAAAA")[1]["ystr"]["shared_with"], 0)
+        s = g.admin_state()["ystr"]
+        self.assertEqual((s["generation"], s["stats"]["pct_start"], s["stats"]["differ_ids"]),
+                         (1, 50.0, [0]))
+        # switching panel restarts at generation 0 for everyone registered
+        g.ystr_set_panel("rmplex")
+        me = g.me("tokenCCCC")[1]["ystr"]
+        self.assertEqual((me["panel"], me["generation"], me["alleles"]), ("RMplex", 0, [10] * 30))
+        self.assertEqual(me["shared_with"], 2)
+        with self.assertRaises(ValueError):
+            g.ystr_set_panel("nonsense")
+        g.ystr_next()
+        g2 = server.Game(g.state_file, max_participants=5)
+        self.assertEqual(g2.ystr, {"panel": "rmplex", "generation": 1})
+        self.assertEqual(g2.participants[0]["ystr"], g.participants[0]["ystr"])
 
 
 if __name__ == "__main__":

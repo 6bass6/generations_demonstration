@@ -14,7 +14,9 @@ Model
   Related : match > 0.
 
 Other games (selected by the admin): welcome screen, birthday paradox,
-betting (pick 0-3; the admin reveals the answer and sees the winning IDs).
+betting (pick 0-3; the admin reveals the answer and sees the winning IDs),
+Y-STR (everyone starts with allele 10 on every marker of the chosen panel; each
+generation a marker mutates +1 or -1 with its own rate).
 
 Usage
   python3 server.py [--port 8080] [--admin-password X] [--tunnel]
@@ -183,13 +185,81 @@ def bet_winners(bets, answer):
 
 
 # ---------------------------------------------------------------------------
+# Y-STR mutation (pure functions)
+# ---------------------------------------------------------------------------
+
+YSTR_START_ALLELE = 10
+
+# Per-generation mutation rate per marker (half +1, half -1). DYS385 is one block.
+YSTR_PANELS = {
+    "ppy23": {"name": "PowerPlex Y23", "markers": [
+        ("DYS19", 0.001964637), ("DYS385", 0.00752201), ("DYS389I", 0.002392753),
+        ("DYS389II", 0.005477107), ("DYS390", 0.002710027), ("DYS391", 0.002476304),
+        ("DYS392", 0.000770746), ("DYS393", 0.00170911), ("DYS437", 0.001195866),
+        ("DYS438", 0.000256366), ("DYS439", 0.004791649), ("DYS448", 0.000838379),
+        ("DYS456", 0.004352368), ("DYS458", 0.008537616), ("DYS481", 0.004723265),
+        ("DYS533", 0.003515152), ("DYS570", 0.00827857), ("DYS576", 0.012674578),
+        ("DYS635", 0.003835425), ("YGATAH4", 0.001914209), ("DYS643", 0.001128032),
+        ("DYS549", 0.00415677),
+    ]},
+    "rmplex": {"name": "RMplex", "markers": [
+        ("DYF1000", 0.035880708), ("DYF1001", 0.048041045), ("DYF1002", 0.016775396),
+        ("DYF387S1", 0.010224215), ("DYF393S1", 0.007136485), ("DYF399S1", 0.062834749),
+        ("DYF403S1a", 0.027253957), ("DYF403S1b", 0.018151354), ("DYF404S1", 0.012512031),
+        ("DYR88", 0.026328162), ("DYS1003", 0.012581547), ("DYS1005", 0.009785648),
+        ("DYS1007", 0.017241379), ("DYS1010", 0.013999067), ("DYS1012", 0.01584343),
+        ("DYS1013", 0.010782935), ("DYS442", 0.00740740740740741), ("DYS449", 0.011216776),
+        ("DYS518", 0.013288448), ("DYS526b", 0.02464744), ("DYS547", 0.014683544),
+        ("DYS570", 0.00827857), ("DYS576", 0.012674578), ("DYS612", 0.016267943),
+        ("DYS626", 0.008596713), ("DYS627", 0.014489091), ("DYS711", 0.026561044),
+        ("DYS712", 0.031098546), ("DYS713", 0.013859275), ("DYS724", 0.048018648),
+    ]},
+}
+
+
+def ystr_start(panel):
+    return [YSTR_START_ALLELE] * len(YSTR_PANELS[panel]["markers"])
+
+
+def ystr_step(alleles, rates, rng):
+    """One generation: marker i gains a repeat with p=rate/2, loses one with p=rate/2.
+    Returns (new alleles, indices of the markers that mutated)."""
+    new, changed = list(alleles), []
+    for i, rate in enumerate(rates):
+        u = rng.random()
+        if u < rate / 2:
+            new[i] += 1
+        elif u < rate:
+            new[i] -= 1
+        else:
+            continue
+        changed.append(i)
+    return new, changed
+
+
+def ystr_stats(haplotypes):
+    """haplotypes: {id: [alleles]}. Share identical to the starting haplotype, IDs that
+    differ from it, and per ID the number of OTHER participants with the same haplotype."""
+    groups = {}
+    for pid, alleles in haplotypes.items():
+        groups.setdefault(tuple(alleles), []).append(pid)
+    differ = sorted(pid for pid, a in haplotypes.items()
+                    if any(x != YSTR_START_ALLELE for x in a))
+    n = len(haplotypes)
+    return {"n": n, "n_start": n - len(differ),
+            "pct_start": 100.0 * (n - len(differ)) / n if n else None,
+            "differ_ids": differ, "n_haplotypes": len(groups),
+            "shared": {pid: len(groups[tuple(a)]) - 1 for pid, a in haplotypes.items()}}
+
+
+# ---------------------------------------------------------------------------
 # Game state (thread-safe, persisted to JSON)
 # ---------------------------------------------------------------------------
 
 class Game:
     """All state for all games. Participants (token -> ID) are shared by every game."""
 
-    MODES = ("welcome", "generations", "birthday", "betting")
+    MODES = ("welcome", "generations", "birthday", "betting", "ystr")
 
     def __init__(self, state_file, max_participants, seed=None):
         self.state_file = state_file
@@ -206,7 +276,9 @@ class Game:
         # id -> {token, last_seen, profile (None = not in this generations round), greyed_last}
         self.participants = {}
         self.betting = {"round": 1, "open": True, "answer": None}
+        self.ystr = {"panel": "ppy23"}
         self._reset_generations()
+        self._reset_ystr()
 
     def _reset_generations(self):
         self.generation = 1
@@ -215,6 +287,12 @@ class Game:
             p["profile"], p["greyed_last"] = new_profile(self.rng), None
         self._dirty = True
         self._per = {}
+
+    def _reset_ystr(self):
+        """Back to generation 0: everyone registered gets the starting haplotype."""
+        self.ystr["generation"] = 0
+        for p in self.participants.values():
+            p["ystr"], p["ystr_last"] = ystr_start(self.ystr["panel"]), []
 
     # -- persistence -------------------------------------------------------
     def _load(self):
@@ -231,10 +309,16 @@ class Game:
             self.participants = {int(k): v for k, v in data["participants"].items()}
             self.history = data.get("history", [])
             self.betting = data.get("betting", self.betting)
+            self.ystr = data.get("ystr", {"panel": "ppy23", "generation": 0})
+            n_markers = len(YSTR_PANELS[self.ystr["panel"]]["markers"])
             for p in self.participants.values():
                 if p.get("profile") is not None:
                     assert len(p["profile"]["top"]) == N_COLS
                     assert len(p["profile"]["bottom"]) == N_COLS
+                if "ystr" not in p and self.ystr["generation"] == 0:  # state from before Y-STR
+                    p["ystr"], p["ystr_last"] = ystr_start(self.ystr["panel"]), []
+                if p.get("ystr") is not None:
+                    assert len(p["ystr"]) == n_markers
             log.info("Resumed state: mode %s, generation %d, %d participants",
                      self.mode, self.generation, len(self.participants))
         except Exception as exc:  # corrupt state: back it up and start fresh
@@ -247,7 +331,7 @@ class Game:
     def _save(self):
         data = {"mode": self.mode, "generation": self.generation, "locked": self.locked,
                 "participants": self.participants, "history": self.history,
-                "betting": self.betting}
+                "betting": self.betting, "ystr": self.ystr}
         tmp = self.state_file + ".tmp"
         with open(tmp, "w") as fh:
             json.dump(data, fh)
@@ -291,8 +375,11 @@ class Game:
             pid = free[0]
             # Only people present in generation 1 take part in the current generations round
             profile = new_profile(self.rng) if self.generation == 1 else None
+            # Likewise, only people present at Y-STR generation 0 take part in that round
+            ystr = ystr_start(self.ystr["panel"]) if self.ystr["generation"] == 0 else None
             self.participants[pid] = {"token": token, "profile": profile,
-                                      "greyed_last": None, "last_seen": time.time()}
+                                      "greyed_last": None, "ystr": ystr, "ystr_last": [],
+                                      "last_seen": time.time()}
             log.info("Join: id %d", pid)
             self._changed()
             return 200, {"id": pid}
@@ -324,6 +411,15 @@ class Game:
                 out["betting"] = {"round": self.betting["round"], "open": self.betting["open"],
                                   "pick": pick, "answer": answer,
                                   "correct": None if answer is None else pick == answer}
+            elif self.mode == "ystr":
+                panel = YSTR_PANELS[self.ystr["panel"]]
+                stats = self._ystr_stats()
+                out["ystr"] = {"panel": panel["name"], "generation": self.ystr["generation"],
+                               "in_round": p.get("ystr") is not None,
+                               "markers": [m for m, _ in panel["markers"]],
+                               "alleles": p.get("ystr"), "changed_last": p.get("ystr_last", []),
+                               "shared_with": stats["shared"].get(pid),
+                               "n_in_round": stats["n"]}
             return 200, out
 
     def place_bet(self, token, pick):
@@ -374,6 +470,38 @@ class Game:
             self._reset_generations()
             log.info("Generations game reset")
             self._changed()
+
+    def ystr_set_panel(self, panel):
+        """Switch panel; this restarts the Y-STR round at generation 0."""
+        with self.lock:
+            if panel not in YSTR_PANELS:
+                raise ValueError(f"unknown panel {panel!r}")
+            self.ystr["panel"] = panel
+            self._reset_ystr()
+            log.info("Y-STR panel: %s (generation 0)", YSTR_PANELS[panel]["name"])
+            self._save()
+
+    def ystr_next(self):
+        with self.lock:
+            rates = [r for _, r in YSTR_PANELS[self.ystr["panel"]]["markers"]]
+            n_mut = 0
+            for p in self.participants.values():
+                if p.get("ystr") is not None:
+                    p["ystr"], p["ystr_last"] = ystr_step(p["ystr"], rates, self.rng)
+                    n_mut += len(p["ystr_last"])
+            self.ystr["generation"] += 1
+            log.info("Y-STR generation %d: %d mutations", self.ystr["generation"], n_mut)
+            self._save()
+
+    def ystr_reset(self):
+        with self.lock:
+            self._reset_ystr()
+            log.info("Y-STR round reset")
+            self._save()
+
+    def _ystr_stats(self):
+        return ystr_stats({i: p["ystr"] for i, p in self.participants.items()
+                           if p.get("ystr") is not None})
 
     def clear_all(self):
         """Forget all participants (devices rejoin and get new IDs)."""
@@ -446,7 +574,19 @@ class Game:
                     "max_participants": self.max_participants,
                     "public_url": self.public_url,
                     "participants": parts, "history": self.history,
-                    "birthday": birthday, "betting": self._betting_summary()}
+                    "birthday": birthday, "betting": self._betting_summary(),
+                    "ystr": self._ystr_summary()}
+
+    def _ystr_summary(self):
+        panel = YSTR_PANELS[self.ystr["panel"]]
+        stats = self._ystr_stats()
+        del stats["shared"]
+        return {"panel": self.ystr["panel"], "generation": self.ystr["generation"],
+                "panels": [{"key": k, "name": v["name"], "n_markers": len(v["markers"])}
+                           for k, v in YSTR_PANELS.items()],
+                "markers": [m for m, _ in panel["markers"]], "stats": stats,
+                "alleles": {i: p["ystr"] for i, p in self.participants.items()
+                            if p.get("ystr") is not None}}
 
     def _betting_summary(self):
         bets, answer = self._bets(), self.betting["answer"]
@@ -550,6 +690,12 @@ class Handler(SimpleHTTPRequestHandler):
                 self.game.bet_reveal(body.get("answer"))
             elif path == "/api/admin/bet/new":
                 self.game.bet_new_round()
+            elif path == "/api/admin/ystr/panel":
+                self.game.ystr_set_panel(str(body.get("panel")))
+            elif path == "/api/admin/ystr/next":
+                self.game.ystr_next()
+            elif path == "/api/admin/ystr/reset":
+                self.game.ystr_reset()
             elif path == "/api/admin/lock":
                 self.game.set_locked(body.get("locked", True))
             elif path == "/api/admin/remove":
